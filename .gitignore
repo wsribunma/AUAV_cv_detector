@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# model weights - auto-downloaded on first run, not source
+*.pt
+*.onnx
+
+# captured/annotated footage - regenerable, and may contain real people
+outputs/
+*.mp4
+*.avi
+
+# ultralytics run artifacts
+runs/
