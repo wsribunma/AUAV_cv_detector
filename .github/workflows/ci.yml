@@ -1,0 +1,31 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # opencv-python (not the -headless variant) needs libGL at import
+      # time even though this job never opens a real display.
+      - name: Install system libs opencv-python needs to import
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+
+      - name: Install dependencies
+        run: pip install ruff -r requirements.txt
+
+      - name: Lint
+        run: ruff check src
+
+      # No pytest suite exists yet (see README - this is a standalone
+      # prototype). This is the cheapest real correctness check available
+      # today: ruff parses the source but never executes it, so a broken
+      # import or an API call that doesn't exist on the installed
+      # ultralytics/opencv version would pass lint and still fail at
+      # runtime. It never opens a camera or a window - only imports the
+      # module - so it doesn't need a display or hardware.
+      - name: Import smoke check
+        run: python -c "import sys; sys.path.insert(0, 'src'); import detect"
