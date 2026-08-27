@@ -18,6 +18,9 @@ Usage:
 Press q or Esc to quit the live window. The first run downloads the model
 weights (~6 MB) from Ultralytics; they are cached locally afterward and are
 not checked into git (see .gitignore).
+
+Author: Worawis Sribunma
+© Copyright Aero UAViation 2026
 """
 
 from __future__ import annotations
@@ -57,7 +60,9 @@ def run(source: str, model_name: str, conf: float, save_path: str | None) -> int
     writer = None
     if save_path:
         os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # H.264-in-MP4 container
+        # Fall back to a common default if the source can't report its own
+        # size (some virtual/loopback cameras return 0 for these).
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
         writer = cv2.VideoWriter(save_path, fourcc, 20.0, (w, h))
@@ -89,7 +94,7 @@ def run(source: str, model_name: str, conf: float, save_path: str | None) -> int
                 break
 
             cv2.imshow("AUAV CV prototype - person detection (q to quit)", annotated)
-            if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+            if cv2.waitKey(1) & 0xFF in (ord("q"), 27):  # 27 == Esc
                 break
     finally:
         cap.release()
