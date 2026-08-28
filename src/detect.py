@@ -5,7 +5,15 @@ Quick prototype for the ground-based CV detector path in
 AUAV_ground_command_center (OBS-06 in that project's requirements
 workbook) - proves live detection with bounding boxes on ordinary laptop
 hardware before anything gets wired into the geotagging pipeline. Person
-class only (COCO class 0); nothing here talks to that project yet.
+class only (COCO class 0).
+
+`detect_people()` is the reusable half: pixels in, structured `Detection`
+objects out (box, confidence, class, capture time) - no window, no file I/O.
+That's what AUAV_ground_command_center's app/sources/cv_detection.py imports
+to turn a detection into a geotagged Observation. `run()` below is this
+repo's own CLI on top of it - same function, drawing its own boxes from the
+same `Detection` objects rather than a second, divergent path through
+`results[0].plot()`.
 
 Usage:
     python src/detect.py                        # laptop webcam, live window
@@ -26,14 +34,80 @@ Author: Worawis Sribunma
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import time
+from dataclasses import dataclass
 
 import cv2
 from ultralytics import YOLO
 
 PERSON_CLASS = 0  # COCO class id
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
+
+
+@dataclass(frozen=True)
+class Detection:
+    """One detected box, in the frame's own pixel coordinates - (0, 0) at
+    top-left, x right, y down, same convention OpenCV and Ultralytics both
+    use. `frame_width`/`frame_height` ride along so a caller can turn a box
+    into a normalized offset from frame center without also having to thread
+    the frame's shape through separately."""
+
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    confidence: float
+    class_id: int
+    class_name: str
+    captured_at: dt.datetime
+    frame_width: int
+    frame_height: int
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return ((self.x1 + self.x2) / 2.0, (self.y1 + self.y2) / 2.0)
+
+
+def detect_people(model: YOLO, frame, conf: float = 0.4) -> list[Detection]:
+    """Run `model` on one BGR frame (as `cv2.VideoCapture.read()` returns),
+    return every person detection scoring at least `conf`. Pure function of
+    its inputs plus wall-clock time for `captured_at` - no window, no camera
+    access, no file I/O, so it's callable from a background thread or a unit
+    test with a static image just as well as from `run()`'s live loop below.
+    """
+    results = model.predict(frame, classes=[PERSON_CLASS], conf=conf, verbose=False)
+    now = dt.datetime.now(dt.timezone.utc)
+    height, width = frame.shape[:2]
+    boxes = results[0].boxes
+    detections = []
+    for i in range(len(boxes)):
+        x1, y1, x2, y2 = (float(v) for v in boxes.xyxy[i].tolist())
+        class_id = int(boxes.cls[i])
+        detections.append(
+            Detection(
+                x1=x1, y1=y1, x2=x2, y2=y2,
+                confidence=float(boxes.conf[i]),
+                class_id=class_id,
+                class_name=model.names[class_id],
+                captured_at=now,
+                frame_width=width,
+                frame_height=height,
+            )
+        )
+    return detections
+
+
+def _draw_detections(frame, detections: list[Detection]):
+    for det in detections:
+        p1 = (int(det.x1), int(det.y1))
+        p2 = (int(det.x2), int(det.y2))
+        cv2.rectangle(frame, p1, p2, (0, 255, 0), 2)
+        label = f"{det.class_name} {det.confidence:.2f}"
+        cv2.putText(frame, label, (p1[0], max(p1[1] - 8, 0)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return frame
 
 
 def list_cameras(max_index: int = 8) -> None:
@@ -74,13 +148,13 @@ def run(source: str, model_name: str, conf: float, save_path: str | None) -> int
             if not ok:
                 break
 
-            results = model.predict(frame, classes=[PERSON_CLASS], conf=conf, verbose=False)
-            annotated = results[0].plot()
+            detections = detect_people(model, frame, conf=conf)
+            annotated = _draw_detections(frame, detections)
 
             now = time.time()
             fps = 1.0 / max(now - prev_t, 1e-6)
             prev_t = now
-            cv2.putText(annotated, f"{fps:.1f} fps  {len(results[0].boxes)} person(s)",
+            cv2.putText(annotated, f"{fps:.1f} fps  {len(detections)} person(s)",
                         (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
             if writer:
@@ -90,7 +164,7 @@ def run(source: str, model_name: str, conf: float, save_path: str | None) -> int
                 os.makedirs("outputs", exist_ok=True)
                 out_path = os.path.join("outputs", "annotated.jpg")
                 cv2.imwrite(out_path, annotated)
-                print(f"wrote {out_path} ({len(results[0].boxes)} person(s) detected)")
+                print(f"wrote {out_path} ({len(detections)} person(s) detected)")
                 break
 
             cv2.imshow("AUAV CV prototype - person detection (q to quit)", annotated)

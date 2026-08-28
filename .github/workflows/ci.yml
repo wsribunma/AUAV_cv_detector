@@ -18,14 +18,17 @@ jobs:
         run: pip install ruff -r requirements.txt
 
       - name: Lint
-        run: ruff check src
+        run: ruff check src tests
 
-      # No pytest suite exists yet (see README - this is a standalone
-      # prototype). This is the cheapest real correctness check available
-      # today: ruff parses the source but never executes it, so a broken
-      # import or an API call that doesn't exist on the installed
-      # ultralytics/opencv version would pass lint and still fail at
-      # runtime. It never opens a camera or a window - only imports the
-      # module - so it doesn't need a display or hardware.
+      # Import smoke check first, cheap and catches a broken import before
+      # paying for a model download. Never opens a camera or a window - only
+      # imports the module - so it needs no display or hardware.
       - name: Import smoke check
         run: python -c "import sys; sys.path.insert(0, 'src'); import detect"
+
+      # detect_people() is real, testable logic now (structured output, not
+      # just a display loop), so it gets a real pytest suite - runs YOLO
+      # against Ultralytics' own bundled sample photo, downloading yolov8n's
+      # weights (~6 MB) on first run. No camera or display needed.
+      - name: Test
+        run: pytest -q

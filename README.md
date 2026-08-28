@@ -1,16 +1,21 @@
 # AUAV_cv_detector
 
-Quick prototype: live human detection over a webcam using YOLO, bounding boxes
-drawn in real time. Built to prove out the ground-based CV detector path
-(`OBS-06` in [AUAV_ground_command_center](../AUAV_ground_command_center)'s
-requirements workbook) - an elevated, downward-looking camera detecting
-people for search-and-rescue / surveillance, ahead of an eventual onboard
-port once an airframe is funded.
+Live human detection over a webcam using YOLO. Built to prove out the
+ground-based CV detector path (`OBS-06` in
+[AUAV_ground_command_center](../AUAV_ground_command_center)'s requirements
+workbook) - an elevated, downward-looking camera detecting people for
+search-and-rescue / surveillance, ahead of an eventual onboard port once an
+airframe is funded.
 
-This repo is standalone and doesn't talk to AUAV_ground_command_center yet -
-no geotagging, no `Observation` schema, just camera in, bounding boxes out.
-The intent is to fold it in as a git submodule once the detector side is
-worth versioning separately from the platform repo.
+This repo has no geotagging or `Observation` schema of its own - it stays
+camera in, structured detections out - but it's no longer a dead end:
+`detect_people()` in `src/detect.py` is a reusable function (box, confidence,
+class, capture time), not just the CLI's own display loop, and it's what
+AUAV_ground_command_center's `app/sources/cv_detection.py` imports (via the
+`external/AUAV_cv_detector` submodule this repo already is there) to turn a
+live detection into a geotagged `Observation` against whatever aircraft pose
+AUAV SITL is currently reporting. `run()` below is still this repo's own CLI
+on top of the same function, for previewing detection on its own.
 
 ## Setup
 
@@ -45,6 +50,27 @@ python src/detect.py --conf 0.6              # raise the confidence threshold
 
 `outputs/` is gitignored on purpose - annotated frames/video may contain
 real people and are regenerable, not source.
+
+## As a library
+
+```python
+from ultralytics import YOLO
+from detect import detect_people   # src/ on your path
+
+model = YOLO("yolov8n.pt")
+detections = detect_people(model, frame, conf=0.4)   # frame: a cv2.VideoCapture().read() BGR array
+for d in detections:
+    print(d.class_name, d.confidence, d.center)       # center in the frame's own pixel coords
+```
+
+No window, no file I/O - safe to call from a background thread or a test.
+`tests/test_detect.py` runs it against the person photo Ultralytics itself
+bundles as a package asset, so there's no image fixture to maintain here:
+
+```bash
+pip install -r requirements.txt   # now includes pytest
+pytest -q
+```
 
 ## Notes
 
