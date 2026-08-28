@@ -9,11 +9,13 @@ class only (COCO class 0).
 
 `detect_people()` is the reusable half: pixels in, structured `Detection`
 objects out (box, confidence, class, capture time) - no window, no file I/O.
-That's what AUAV_ground_command_center's app/sources/cv_detection.py imports
-to turn a detection into a geotagged Observation. `run()` below is this
-repo's own CLI on top of it - same function, drawing its own boxes from the
-same `Detection` objects rather than a second, divergent path through
-`results[0].plot()`.
+`draw_detections()` turns those back into pixels (boxes + confidence labels)
+for anything that wants to show a human the same detections a caller is
+otherwise consuming as data. Both are what
+AUAV_ground_command_center's app/sources/cv_detection.py imports - one path
+for the geotagged Observation feeding the map, the other for the live
+preview in its Camera tab, off one shared camera/model rather than two.
+`run()` below is this repo's own CLI on top of the same two functions.
 
 Usage:
     python src/detect.py                        # laptop webcam, live window
@@ -99,7 +101,7 @@ def detect_people(model: YOLO, frame, conf: float = 0.4) -> list[Detection]:
     return detections
 
 
-def _draw_detections(frame, detections: list[Detection]):
+def draw_detections(frame, detections: list[Detection]):
     for det in detections:
         p1 = (int(det.x1), int(det.y1))
         p2 = (int(det.x2), int(det.y2))
@@ -149,7 +151,7 @@ def run(source: str, model_name: str, conf: float, save_path: str | None) -> int
                 break
 
             detections = detect_people(model, frame, conf=conf)
-            annotated = _draw_detections(frame, detections)
+            annotated = draw_detections(frame, detections)
 
             now = time.time()
             fps = 1.0 / max(now - prev_t, 1e-6)
