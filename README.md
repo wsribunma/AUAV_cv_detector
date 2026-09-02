@@ -79,7 +79,8 @@ pytest -q
 - `yolov8n.pt` (nano) is the default for prototype speed on CPU. Swap
   `--model yolov8s.pt` or larger for better accuracy once this moves past
   "does it work on my laptop."
-- No accuracy claims are made by this script itself - see
-  AUAV_ground_command_center's `CLAUDE.md` (decision 3) for the project's
-  position on publishing detector vs. geolocation numbers once this is wired
-  into the real pipeline.
+- No accuracy claims are made by this script itself. Once this is wired
+  into the real pipeline, detection performance (precision/recall) may be
+  measured and published alongside geolocation accuracy - geolocation
+  remains the primary, harder-to-fake claim to lead with, but detector
+  numbers don't need to be scrubbed out of the pitch.
